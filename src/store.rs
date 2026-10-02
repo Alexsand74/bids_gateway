@@ -141,7 +141,6 @@ impl BidsStore {
 
     /// Разбор всех месяцев сессии: months\<ГГГГ-ММ>\supply_requests.json
     /// Формат файла: словарь { "ST1": {...заявка...}, "ST2": {...} }
-    /// (массив тоже поддерживается на всякий случай)
     fn parse_session(
         &self,
         session_dir: &Path,
@@ -254,10 +253,12 @@ fn extract_goods(record: &serde_json::Value, cfg: &AppConfig) -> (String, usize)
         for item in items {
             let t1 = extract_field(item, &cfg.fields.tovar);
             let t2 = extract_field(item, &cfg.fields.tovar2);
-            if !t1.is_empty() {
+
+            // Сравнение ДО перемещения в parts (иначе borrow of moved value)
+            if !t1.is_empty() && t2 != t1 {
                 parts.push(t1);
             }
-            if !t2.is_empty() && t2 != t1 {
+            if !t2.is_empty() {
                 parts.push(t2);
             }
         }
@@ -280,16 +281,24 @@ fn build_bid_item(
     month: &str,
     session: &str,
 ) -> BidItem {
+    // Сначала считаем все производные значения, ПОТОМ двигаем строки в структуру.
+    // Иначе borrow of moved value: поле уйдёт в BidItem раньше, чем по нему
+    // посчитаются токены.
     let number_norm = clean_text(&number);
-    let firm_norm = clean_text(&firm);
-    let firm2_norm = clean_text(&firm2);
-    let name_norm = clean_text(&name);
-    let comment_norm = clean_text(&comment);
-    let goods_norm = clean_text(&goods);
+    let firm_tokens = tokenize(&firm);
+    let firm2_tokens = tokenize(&firm2);
+    let name_tokens = tokenize(&name);
+    let comment_tokens = tokenize(&comment);
+    let goods_tokens = tokenize(&goods);
 
     let all_text = format!(
         "{} {} {} {} {} {}",
-        number_norm, firm_norm, firm2_norm, name_norm, comment_norm, goods_norm
+        number_norm,
+        clean_text(&firm),
+        clean_text(&firm2),
+        clean_text(&name),
+        clean_text(&comment),
+        clean_text(&goods)
     );
 
     BidItem {
@@ -304,11 +313,11 @@ fn build_bid_item(
         month: month.to_string(),
         session: session.to_string(),
         number_norm,
-        firm_tokens: tokenize(&firm),
-        firm2_tokens: tokenize(&firm2),
-        name_tokens: tokenize(&name),
-        comment_tokens: tokenize(&comment),
-        goods_tokens: tokenize(&goods),
+        firm_tokens,
+        firm2_tokens,
+        name_tokens,
+        comment_tokens,
+        goods_tokens,
         all_text,
     }
 }

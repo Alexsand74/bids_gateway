@@ -4,7 +4,7 @@
 use crate::models::BidItem;
 use crate::normalizer::{clean_text, tokenize};
 
-pub fn search_bids(snapshot: &[BidItem], query: &str, field: &str) -> Vec<&BidItem> {
+pub fn search_bids<'a>(snapshot: &'a [BidItem], query: &str, field: &str) -> Vec<&'a BidItem> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
         return Vec::new();

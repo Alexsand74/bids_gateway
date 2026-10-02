@@ -56,7 +56,7 @@ fn main() -> Result<()> {
             l.info("[SYS] Получен сигнал остановки (Ctrl+C). Завершаем Bids_Gateway...");
             r.store(false, Ordering::SeqCst);
         })
-        .expect("Не удалось установить Ctrl+C handler");
+            .expect("Не удалось установить Ctrl+C handler");
     }
 
     // Начальная загрузка каталога заявок
@@ -82,37 +82,53 @@ fn main() -> Result<()> {
             if !st_running.load(Ordering::Relaxed) {
                 return;
             }
-            match bus::BusProducer::connect_or_create(&st_cfg.queues.request_queue, &st_running) {
-                Ok(producer) => {
-                    let body = serde_json::json!({
-                        "task_id": "self-test",
-                        "source": "self_test",
-                        "action": "search_bids",
-                        "params": {
-                            "keyword": st_cfg.self_test.keyword,
-                            "field": st_cfg.self_test.field
-                        }
-                    });
-                    match producer.publish(
-                        "Self_Test",
-                        "Bids_Gateway",
-                        "bids.search.request",
-                        "0",
-                        "self_test",
-                        "search_bids",
-                        &body.to_string(),
-                        "",
-                        "",
-                    ) {
-                        Ok(()) => st_log.info("[SELF-TEST] Тестовый запрос отправлен во входную очередь."),
-                        Err(e) => st_log.warn(&format!(
-                            "[SELF-TEST] Не удалось отправить тестовый запрос: {:#}",
-                            e
-                        )),
-                    }
+            let producer = match bus::BusProducer::connect_or_create(
+                &st_cfg.queues.request_queue,
+                &st_running,
+            ) {
+                Ok(p) => p,
+                Err(e) => {
+                    st_log.warn(&format!("[SELF-TEST] Не удалось создать очередь: {:#}", e));
+                    return;
                 }
-                Err(e) => st_log.warn(&format!("[SELF-TEST] Не удалось создать очередь: {:#}", e)),
+            };
+
+            let body = serde_json::json!({
+                "task_id": "self-test",
+                "source": "self_test",
+                "action": "search_bids",
+                "params": {
+                    "keyword": st_cfg.self_test.keyword,
+                    "field": st_cfg.self_test.field
+                }
+            });
+            match producer.publish(
+                "Self_Test",
+                "Bids_Gateway",
+                "bids.search.request",
+                "0",
+                "self_test",
+                "search_bids",
+                &body.to_string(),
+                "",
+                "",
+            ) {
+                Ok(()) => st_log.info("[SELF-TEST] Тестовый запрос отправлен во входную очередь."),
+                Err(e) => st_log.warn(&format!(
+                    "[SELF-TEST] Не удалось отправить тестовый запрос: {:#}",
+                    e
+                )),
             }
+
+            // ВАЖНО: держим producer живым до остановки сервиса!
+            // Shared memory живёт, пока открыт хотя бы один хендл.
+            // Если поток завершится сразу после publish, очередь вместе
+            // с сообщением уничтожится раньше, чем слушатель (он проверяет
+            // раз в секунду) успеет к ней подключиться.
+            while st_running.load(Ordering::Relaxed) {
+                thread::sleep(Duration::from_secs(1));
+            }
+            drop(producer);
         });
     }
 

@@ -1,0 +1,21 @@
+2026-10-02 20:29:55.910 | INFO  | Bids_Gateway | tid=ThreadId(1) | ========================================================
+2026-10-02 20:29:55.910 | INFO  | Bids_Gateway | tid=ThreadId(1) |    BIDS_GATEWAY — поиск заявок по выгрузкам orekeeper    
+2026-10-02 20:29:55.910 | INFO  | Bids_Gateway | tid=ThreadId(1) | ========================================================
+2026-10-02 20:29:55.910 | INFO  | Bids_Gateway | tid=ThreadId(1) | [ CFG ] Выгрузки заявок : ../orekeeper/data/bid
+2026-10-02 20:29:55.910 | INFO  | Bids_Gateway | tid=ThreadId(1) | [ CFG ] Логи orekeeper  : ../orekeeper/logs/bid
+2026-10-02 20:29:55.911 | INFO  | Bids_Gateway | tid=ThreadId(1) | [ IN  ] Request queue   : BidsManager_To_BidsGateway
+2026-10-02 20:29:55.911 | INFO  | Bids_Gateway | tid=ThreadId(1) | [ OUT ] Reply queue     : BidsGateway_To_BidsManager
+2026-10-02 20:29:55.911 | INFO  | Bids_Gateway | tid=ThreadId(1) | [ OUT ] Target service  : Bids_Manager
+2026-10-02 20:29:55.911 | INFO  | Bids_Gateway | tid=ThreadId(1) | [ CFG ] Воркеры         : 2..8 (backlog 16 -> рост)
+2026-10-02 20:29:55.911 | INFO  | Bids_Gateway | tid=ThreadId(1) | [ CFG ] Watcher         : каждые 1800 сек
+2026-10-02 20:29:55.912 | INFO  | Bids_Gateway | tid=ThreadId(1) | [ CFG ] Поля заявок     : номер='Number' дата='Date' орг='ZakazPodr'/'ZakupPodr' наименование='Name' комментарий='Details' товары='Tovars'
+2026-10-02 20:29:55.930 | INFO  | Bids_Gateway | tid=ThreadId(1) | [BIDS] Замена каталога: старый вектор (0 поз.) -> новый вектор (0 поз.)
+2026-10-02 20:29:55.930 | INFO  | Bids_Gateway | tid=ThreadId(1) | Начальный каталог заявок загружен: сессия '2026-09-30-17-24-53', 0 заявок в памяти
+2026-10-02 20:29:55.930 | INFO  | Bids_Gateway | tid=ThreadId(1) | [SYS] Запуск супервизора bids_gateway...
+2026-10-02 20:29:55.932 | INFO  | Bids_Gateway | tid=ThreadId(3) | [BUS] Подключение к входной очереди 'BidsManager_To_BidsGateway'...
+2026-10-02 20:29:55.933 | INFO  | Bids_Gateway | tid=ThreadId(4) | [WATCHER] Запущен: проверка новых срезов каждые 1800 сек.
+2026-10-02 20:29:55.933 | INFO  | Bids_Gateway | tid=ThreadId(1) | [POOL] Запущен воркер (активных: 1)
+2026-10-02 20:29:55.934 | INFO  | Bids_Gateway | tid=ThreadId(1) | [POOL] Запущен воркер (активных: 2)
+2026-10-02 20:30:37.051 | INFO  | Bids_Gateway | tid=ThreadId(2) | [SYS] Получен сигнал остановки (Ctrl+C). Завершаем Bids_Gateway...
+2026-10-02 20:30:37.108 | WARN  | Bids_Gateway | tid=ThreadId(3) | [BUS] [WAIT] Очередь 'BidsManager_To_BidsGateway' пока недоступна (shutdown во время ожидания очереди BidsManager_To_BidsGateway), ждём 1 сек...
+2026-10-02 20:30:37.212 | INFO  | Bids_Gateway | tid=ThreadId(1) | [SYS] Bids_Gateway остановлен корректно.
