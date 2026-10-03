@@ -42,10 +42,19 @@ fn main() -> Result<()> {
     ));
     log.info(&format!("[ CFG ] Watcher         : каждые {} сек", cfg.watcher.check_interval_sec));
     log.info(&format!(
-        "[ CFG ] Поля заявок     : номер='{}' дата='{}' орг='{}'/'{}' наименование='{}' комментарий='{}' товары='{}'",
-        cfg.fields.number, cfg.fields.date, cfg.fields.firm, cfg.fields.firm2,
+        "[ CFG ] Поля заявок     : номер='{}' дата='{}' статус='{}' срочность='{}' склад='{}' заказал='{}' менеджер='{}' даты='{}/'{}'/'{}' орг='{}'/'{}' наименование='{}' комментарий='{}' товары='{}'",
+        cfg.fields.number, cfg.fields.date, cfg.fields.status, cfg.fields.srochnost,
+        cfg.fields.sklad, cfg.fields.zakazal, cfg.fields.manager,
+        cfg.fields.wish_date, cfg.fields.plan_date, cfg.fields.comp_date,
+        cfg.fields.firm, cfg.fields.firm2,
         cfg.fields.name, cfg.fields.comment, cfg.fields.tovars
     ));
+    log.info(&format!(
+        "[ CFG ] Поля товаров    : строка='{}' товар='{}'/'{}' кол-во='{}' ед.изм.='{}'",
+        cfg.fields.str_num, cfg.fields.tovar, cfg.fields.tovar2,
+        cfg.fields.kolvo, cfg.fields.edizm
+    ));
+    log.info("[ CFG ] Действия        : search_bids | get_bid | get_bid_tovars");
 
     // Ctrl+C -> graceful shutdown
     let running = Arc::new(AtomicBool::new(true));

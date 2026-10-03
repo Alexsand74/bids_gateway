@@ -20,7 +20,18 @@
     "comment": "Details",
     "tovars": "Tovars",
     "tovar": "Tovar",
-    "tovar2": "Tovar2"
+    "tovar2": "Tovar2",
+    "status": "Status",
+    "srochnost": "Srochnost",
+    "sklad": "Sklad",
+    "zakazal": "Zakazal",
+    "manager": "Manager",
+    "wish_date": "WishDate",
+    "plan_date": "PlanDate",
+    "comp_date": "CompDate",
+    "str_num": "StrNum",
+    "kolvo": "Kolvo",
+    "edizm": "Edizm"
   },
   "search": {
     "max_items": 50,

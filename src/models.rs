@@ -70,23 +70,45 @@ pub struct HeapTask {
 //   { "ST1": { "Number": "ЦЕХ_М-00546", "Date": "...", "Sklad": "...",
 //              "Name": "...", "Zakazal": "...", "Manager": "...",
 //              "ZakazPodr": "040266 Цех ...", "ZakupPodr": "040176 ...",
-//              "Status": "...", "Srochnost": "...", "Details": "...",
+//              "Status": "Выполнена", "Srochnost": "Текущая", "Details": "...",
 //              "WishDate": "...", "PlanDate": "...", "CompDate": "...",
 //              "Tovars": { "STT1": { "StrNum": "1", "Tovar": "...",
 //                                    "Tovar2": "...", "Kolvo": "...",
 //                                    "Edizm": "...", "URL": "..." }, ... } } }
 // =========================================================================
+
+/// Одна товарная позиция заявки (для команды «Товары <номер>»).
+/// name = Tovar (полное название из номенклатуры), если не пуст; иначе Tovar2.
+#[derive(Debug, Clone)]
+pub struct BidTovarLine {
+    pub str_num: u32,
+    pub name: String,
+    pub kolvo: String,
+    pub edizm: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct BidItem {
     // исходные поля
-    pub number: String,    // Number, например "ЦЕХ_М-00546"
-    pub date: String,     // Date
-    pub firm: String,     // ZakazPodr — заказывающее подразделение (организация)
-    pub firm2: String,    // ZakupPodr — закупающее подразделение
-    pub name: String,     // Name — название заявки
-    pub comment: String,  // Details — комментарий
-    pub goods: String,    // все позиции товаров: "Tovar; Tovar2; ..."
-    pub items_count: usize,
+    pub number: String,     // Number, например "ЦЕХ_М-00546"
+    pub date: String,       // Date
+    pub firm: String,       // ZakazPodr — заказывающее подразделение (организация)
+    pub firm2: String,      // ZakupPodr — закупающее подразделение
+    pub name: String,       // Name — название заявки
+    pub comment: String,    // Details — комментарий
+    // НОВОЕ: статус и реквизиты карточки заявки
+    pub status: String,     // Status, например "Выполнена"
+    pub srochnost: String,  // Srochnost, например "Текущая"
+    pub sklad: String,      // Sklad — склад / объект назначения
+    pub zakazal: String,    // Zakazal — кто заказал
+    pub manager: String,    // Manager — ответственный менеджер
+    pub wish_date: String,  // WishDate — требуемая дата
+    pub plan_date: String, // PlanDate — плановая дата
+    pub comp_date: String, // CompDate — дата исполнения (может быть пустой!)
+    // товары
+    pub goods: String,                  // все позиции для поиска: "Tovar; Tovar2; ..."
+    pub items_count: usize,            // число позиций (по записям Tovars)
+    pub tovar_lines: Vec<BidTovarLine>, // структурные позиции для показа
     // происхождение записи
     pub month: String,
     pub session: String,
@@ -100,8 +122,33 @@ pub struct BidItem {
     pub all_text: String,
 }
 
+impl BidItem {
+    /// Полная карточка заявки для ответа на действие "get_bid".
+    pub fn to_details(&self) -> BidDetails {
+        BidDetails {
+            number: self.number.clone(),
+            date: self.date.clone(),
+            name: self.name.clone(),
+            status: self.status.clone(),
+            srochnost: self.srochnost.clone(),
+            sklad: self.sklad.clone(),
+            zakazal: self.zakazal.clone(),
+            manager: self.manager.clone(),
+            firm: self.firm.clone(),
+            firm2: self.firm2.clone(),
+            wish_date: self.wish_date.clone(),
+            plan_date: self.plan_date.clone(),
+            comp_date: self.comp_date.clone(),
+            comment: self.comment.clone(),
+            items_count: self.items_count,
+            month: self.month.clone(),
+        }
+    }
+}
+
 // =========================================================================
-// ВХОДЯЩИЙ ПОИСКОВЫЙ ЗАПРОС (JSON внутри payload.query)
+// ВХОДЯЩИЙ ЗАПРОС (JSON внутри payload.query)
+// action: "search_bids" (по умолчанию) | "get_bid" | "get_bid_tovars"
 // =========================================================================
 #[derive(Debug, Default, Deserialize)]
 pub struct SearchQueryParams {
@@ -110,6 +157,12 @@ pub struct SearchQueryParams {
     /// "number" | "firm" | "goods" | "name" | "comment" | "any" (по умолчанию)
     #[serde(default)]
     pub field: Option<String>,
+    /// Номер заявки для действий get_bid / get_bid_tovars
+    #[serde(default)]
+    pub number: Option<String>,
+    /// Номер страницы товаров (1-based) для get_bid_tovars
+    #[serde(default)]
+    pub page: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,7 +173,6 @@ pub struct SearchQueryRequest {
     #[allow(dead_code)]
     #[serde(default)]
     pub source: Option<String>,
-    #[allow(dead_code)]
     #[serde(default)]
     pub action: Option<String>,
     #[serde(default)]
@@ -128,8 +180,10 @@ pub struct SearchQueryRequest {
 }
 
 // =========================================================================
-// ИСХОДЯЩИЙ ОТВЕТ В ШИНУ
+// ИСХОДЯЩИЕ ОТВЕТЫ В ШИНУ
 // =========================================================================
+
+/// Позиция в списке результатов поиска (теперь со статусом).
 #[derive(Debug, Serialize, Clone)]
 pub struct BidResultItem {
     pub number: String,
@@ -138,6 +192,7 @@ pub struct BidResultItem {
     pub firm2: String,
     pub name: String,
     pub comment: String,
+    pub status: String,
     pub items_count: usize,
     /// Первые позиции товаров (обрезаны до 200 символов, для показа пользователю)
     pub goods_preview: String,
@@ -150,4 +205,56 @@ pub struct SearchResponse {
     pub total: usize,
     pub truncated: bool,
     pub result: Vec<BidResultItem>,
+}
+
+/// Полная карточка заявки (ответ на "get_bid").
+#[derive(Debug, Serialize, Clone)]
+pub struct BidDetails {
+    pub number: String,
+    pub date: String,
+    pub name: String,
+    pub status: String,
+    pub srochnost: String,
+    pub sklad: String,
+    pub zakazal: String,
+    pub manager: String,
+    pub firm: String,
+    pub firm2: String,
+    pub wish_date: String,
+    pub plan_date: String,
+    pub comp_date: String,
+    pub comment: String,
+    pub items_count: usize,
+    pub month: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BidDetailsResponse {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<BidDetails>,
+}
+
+/// Одна товарная позиция в ответе "get_bid_tovars".
+#[derive(Debug, Serialize, Clone)]
+pub struct BidTovarLineOut {
+    pub str_num: u32,
+    pub name: String,
+    pub kolvo: String,
+    pub edizm: String,
+}
+
+/// Страница товарных позиций заявки (ответ на "get_bid_tovars").
+#[derive(Debug, Serialize)]
+pub struct BidTovarsResponse {
+    pub status: String,
+    pub number: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub total: usize,
+    pub page: usize,
+    pub pages: usize,
+    pub result: Vec<BidTovarLineOut>,
 }

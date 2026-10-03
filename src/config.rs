@@ -22,6 +22,19 @@ fn d_f_comment() -> String { "Details".into() }
 fn d_f_tovars() -> String { "Tovars".into() }
 fn d_f_tovar() -> String { "Tovar".into() }
 fn d_f_tovar2() -> String { "Tovar2".into() }
+// НОВОЕ: статус заявки и реквизиты карточки
+fn d_f_status() -> String { "Status".into() }
+fn d_f_srochnost() -> String { "Srochnost".into() }
+fn d_f_sklad() -> String { "Sklad".into() }
+fn d_f_zakazal() -> String { "Zakazal".into() }
+fn d_f_manager() -> String { "Manager".into() }
+fn d_f_wish_date() -> String { "WishDate".into() }
+fn d_f_plan_date() -> String { "PlanDate".into() }
+fn d_f_comp_date() -> String { "CompDate".into() }
+// НОВОЕ: ключи полей товарной строки
+fn d_f_str_num() -> String { "StrNum".into() }
+fn d_f_kolvo() -> String { "Kolvo".into() }
+fn d_f_edizm() -> String { "Edizm".into() }
 fn d_max_items() -> usize { 50 }
 fn d_min_query_len() -> usize { 2 }
 fn d_min_threads() -> usize { 2 }
@@ -70,6 +83,8 @@ impl Default for Reply {
 }
 
 /// Имена ключей JSON внутри supply_requests.json.
+/// Новые поля (status и реквизиты карточки) имеют serde-default,
+/// поэтому старый config.json без них тоже продолжит работать.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Fields {
     pub number: String,   // номер заявки ("ЦЕХ_М-00546")
@@ -81,6 +96,19 @@ pub struct Fields {
     pub tovars: String,  // словарь позиций товаров
     pub tovar: String,   // название позиции (полное)
     pub tovar2: String,  // название позиции (короткое)
+    // НОВОЕ: статус и карточка заявки
+    #[serde(default = "d_f_status")] pub status: String,
+    #[serde(default = "d_f_srochnost")] pub srochnost: String,
+    #[serde(default = "d_f_sklad")] pub sklad: String,
+    #[serde(default = "d_f_zakazal")] pub zakazal: String,
+    #[serde(default = "d_f_manager")] pub manager: String,
+    #[serde(default = "d_f_wish_date")] pub wish_date: String,
+    #[serde(default = "d_f_plan_date")] pub plan_date: String,
+    #[serde(default = "d_f_comp_date")] pub comp_date: String,
+    // НОВОЕ: поля товарной строки
+    #[serde(default = "d_f_str_num")] pub str_num: String,
+    #[serde(default = "d_f_kolvo")] pub kolvo: String,
+    #[serde(default = "d_f_edizm")] pub edizm: String,
 }
 impl Default for Fields {
     fn default() -> Self {
@@ -94,6 +122,17 @@ impl Default for Fields {
             tovars: d_f_tovars(),
             tovar: d_f_tovar(),
             tovar2: d_f_tovar2(),
+            status: d_f_status(),
+            srochnost: d_f_srochnost(),
+            sklad: d_f_sklad(),
+            zakazal: d_f_zakazal(),
+            manager: d_f_manager(),
+            wish_date: d_f_wish_date(),
+            plan_date: d_f_plan_date(),
+            comp_date: d_f_comp_date(),
+            str_num: d_f_str_num(),
+            kolvo: d_f_kolvo(),
+            edizm: d_f_edizm(),
         }
     }
 }

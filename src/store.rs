@@ -1,8 +1,12 @@
 //! Хранилище заявок в памяти: загрузка срезов orekeeper + атомарная замена через ArcSwap.
+//!
+//! НОВОЕ: помимо прежних полей извлекаются Status, Srochnost, Sklad, Zakazal,
+//! Manager, WishDate, PlanDate, CompDate, а товарные позиции сохраняются
+//! в структурном виде (Vec<BidTovarLine>) для команды «Товары <номер>».
 
 use crate::config::AppConfig;
 use crate::logger::Logger;
-use crate::models::BidItem;
+use crate::models::{BidItem, BidTovarLine};
 use crate::normalizer::{clean_text, tokenize};
 use anyhow::{bail, Result};
 use arc_swap::ArcSwap;
@@ -26,6 +30,24 @@ struct OrekeeperBidLog {
     success_months: usize,
     #[serde(default)]
     failed_months: usize,
+}
+
+/// Сырые поля одной заявки, извлечённые из JSON-записи.
+struct RawBid {
+    number: String,
+    date: String,
+    firm: String,
+    firm2: String,
+    name: String,
+    comment: String,
+    status: String,
+    srochnost: String,
+    sklad: String,
+    zakazal: String,
+    manager: String,
+    wish_date: String,
+    plan_date: String,
+    comp_date: String,
 }
 
 impl BidsStore {
@@ -87,8 +109,7 @@ impl BidsStore {
             let old = self.bids.load();
             log.info(&format!(
                 "[BIDS] Замена каталога: старый вектор ({} поз.) -> новый вектор ({} поз.)",
-                old.len(),
-                count
+                old.len(), count
             ));
             self.bids.store(Arc::new(items));
             drop(old);
@@ -186,28 +207,35 @@ impl BidsStore {
 
             let mut loaded = 0usize;
             for record in records {
-                let number = extract_field(record, &cfg.fields.number);
-                let date = extract_field(record, &cfg.fields.date);
-                let firm = extract_field(record, &cfg.fields.firm);
-                let firm2 = extract_field(record, &cfg.fields.firm2);
-                let name = extract_field(record, &cfg.fields.name);
-                let comment = extract_field(record, &cfg.fields.comment);
-                let (goods, items_count) = extract_goods(record, cfg);
+                let raw = RawBid {
+                    number: extract_field(record, &cfg.fields.number),
+                    date: extract_field(record, &cfg.fields.date),
+                    firm: extract_field(record, &cfg.fields.firm),
+                    firm2: extract_field(record, &cfg.fields.firm2),
+                    name: extract_field(record, &cfg.fields.name),
+                    comment: extract_field(record, &cfg.fields.comment),
+                    status: extract_field(record, &cfg.fields.status),
+                    srochnost: extract_field(record, &cfg.fields.srochnost),
+                    sklad: extract_field(record, &cfg.fields.sklad),
+                    zakazal: extract_field(record, &cfg.fields.zakazal),
+                    manager: extract_field(record, &cfg.fields.manager),
+                    wish_date: extract_field(record, &cfg.fields.wish_date),
+                    plan_date: extract_field(record, &cfg.fields.plan_date),
+                    comp_date: extract_field(record, &cfg.fields.comp_date),
+                };
+                let (goods, tovar_lines) = extract_tovars(record, cfg);
 
-                if number.is_empty()
-                    && firm.is_empty()
-                    && firm2.is_empty()
-                    && name.is_empty()
-                    && comment.is_empty()
+                if raw.number.is_empty()
+                    && raw.firm.is_empty()
+                    && raw.firm2.is_empty()
+                    && raw.name.is_empty()
+                    && raw.comment.is_empty()
                     && goods.is_empty()
                 {
                     continue; // полностью пустая запись
                 }
 
-                items.push(build_bid_item(
-                    number, date, firm, firm2, name, comment, goods, items_count,
-                    &month, session_name,
-                ));
+                items.push(build_bid_item(raw, goods, tovar_lines, &month, session_name));
                 loaded += 1;
             }
             log.info(&format!("[BIDS] Месяц {}: загружено {} заявок", month, loaded));
@@ -234,11 +262,14 @@ fn extract_field(record: &serde_json::Value, field_name: &str) -> String {
     }
 }
 
-/// Собирает все товарные позиции заявки в одну строку:
-/// "Tovar; Tovar2; ..." — по ней ищем "по названию товара".
-/// Tovars — словарь { "STT1": {...}, ... } или массив.
-fn extract_goods(record: &serde_json::Value, cfg: &AppConfig) -> (String, usize) {
+/// Собирает товарные позиции заявки. Возвращает:
+/// 1) строку "Tovar; Tovar2; ..." — по ней идёт полнотекстовый поиск по товарам
+///    (поведение прежней версии сохранено: при различии имён в строку попадают оба);
+/// 2) структурные строки для показа: name = Tovar (полное из номенклатуры),
+///    если не пуст; иначе Tovar2. items_count теперь равен числу записей Tovars.
+fn extract_tovars(record: &serde_json::Value, cfg: &AppConfig) -> (String, Vec<BidTovarLine>) {
     let mut parts: Vec<String> = Vec::new();
+    let mut lines: Vec<BidTovarLine> = Vec::new();
 
     if let Some(tovars) = record.get(&cfg.fields.tovars) {
         let items: Box<dyn Iterator<Item = &serde_json::Value>> = if let Some(arr) = tovars.as_array()
@@ -256,60 +287,84 @@ fn extract_goods(record: &serde_json::Value, cfg: &AppConfig) -> (String, usize)
 
             // Сравнение ДО перемещения в parts (иначе borrow of moved value)
             if !t1.is_empty() && t2 != t1 {
-                parts.push(t1);
+                parts.push(t1.clone());
             }
             if !t2.is_empty() {
-                parts.push(t2);
+                parts.push(t2.clone());
             }
+
+            // Для показа: полное название из номенклатуры, иначе короткое.
+            let display = if !t1.is_empty() { t1 } else { t2 };
+            if display.is_empty() {
+                continue;
+            }
+
+            let str_num: u32 = extract_field(item, &cfg.fields.str_num)
+                .parse()
+                .unwrap_or(lines.len() as u32 + 1);
+            let kolvo = extract_field(item, &cfg.fields.kolvo);
+            let edizm = extract_field(item, &cfg.fields.edizm);
+
+            lines.push(BidTovarLine {
+                str_num,
+                name: display,
+                kolvo,
+                edizm,
+            });
         }
     }
 
-    let count = parts.len();
-    (parts.join("; "), count)
+    // Гарантируем порядок позиций как в 1С (STT1, STT2, ... STT117)
+    lines.sort_by_key(|l| l.str_num);
+    (parts.join("; "), lines)
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Сначала считаем все производные значения (токены), ПОТОМ двигаем строки
+/// в структуру — иначе borrow of moved value.
 fn build_bid_item(
-    number: String,
-    date: String,
-    firm: String,
-    firm2: String,
-    name: String,
-    comment: String,
+    raw: RawBid,
     goods: String,
-    items_count: usize,
+    tovar_lines: Vec<BidTovarLine>,
     month: &str,
     session: &str,
 ) -> BidItem {
-    // Сначала считаем все производные значения, ПОТОМ двигаем строки в структуру.
-    // Иначе borrow of moved value: поле уйдёт в BidItem раньше, чем по нему
-    // посчитаются токены.
-    let number_norm = clean_text(&number);
-    let firm_tokens = tokenize(&firm);
-    let firm2_tokens = tokenize(&firm2);
-    let name_tokens = tokenize(&name);
-    let comment_tokens = tokenize(&comment);
+    let number_norm = clean_text(&raw.number);
+    let firm_tokens = tokenize(&raw.firm);
+    let firm2_tokens = tokenize(&raw.firm2);
+    let name_tokens = tokenize(&raw.name);
+    let comment_tokens = tokenize(&raw.comment);
     let goods_tokens = tokenize(&goods);
 
     let all_text = format!(
         "{} {} {} {} {} {}",
         number_norm,
-        clean_text(&firm),
-        clean_text(&firm2),
-        clean_text(&name),
-        clean_text(&comment),
+        clean_text(&raw.firm),
+        clean_text(&raw.firm2),
+        clean_text(&raw.name),
+        clean_text(&raw.comment),
         clean_text(&goods)
     );
 
+    let items_count = tovar_lines.len();
+
     BidItem {
-        number,
-        date,
-        firm,
-        firm2,
-        name,
-        comment,
+        number: raw.number,
+        date: raw.date,
+        firm: raw.firm,
+        firm2: raw.firm2,
+        name: raw.name,
+        comment: raw.comment,
+        status: raw.status,
+        srochnost: raw.srochnost,
+        sklad: raw.sklad,
+        zakazal: raw.zakazal,
+        manager: raw.manager,
+        wish_date: raw.wish_date,
+        plan_date: raw.plan_date,
+        comp_date: raw.comp_date,
         goods,
         items_count,
+        tovar_lines,
         month: month.to_string(),
         session: session.to_string(),
         number_norm,
